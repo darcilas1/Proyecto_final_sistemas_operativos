@@ -1,4 +1,5 @@
 #include "compress.h"
+#include "encrypt.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -125,8 +126,10 @@ int main(int argc, char *argv[])
     const char *input_path;
     uint8_t *input_buffer;
     uint8_t *compressed_buffer;
+    uint8_t *encrypted_buffer;
     size_t input_len;
     size_t compressed_len;
+    size_t encrypted_len;
     double compression_ratio;
 
     if (argc < 2) {
@@ -137,8 +140,10 @@ int main(int argc, char *argv[])
     input_path = argv[1];
     input_buffer = NULL;
     compressed_buffer = NULL;
+    encrypted_buffer = NULL;
     input_len = 0;
     compressed_len = 0;
+    encrypted_len = 0;
 
     if (read_file_to_buffer(input_path, &input_buffer, &input_len) != 0) {
         fprintf(stderr, "Error al leer '%s': %s\n", input_path, strerror(errno));
@@ -153,13 +158,19 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    /* TODO Persona 2: llamar encrypt_buffer() aqui antes de escribir a disco. */
-    /* TODO Persona 2: ajustar el buffer de salida si el cifrado cambia tamano/formato. */
+    if (encrypt_buffer(compressed_buffer, compressed_len, &encrypted_buffer, &encrypted_len) != 0) {
+        fprintf(stderr, "Error al cifrar el buffer comprimido: %s\n", strerror(errno));
+        free(input_buffer);
+        free(compressed_buffer);
+        free(encrypted_buffer);
+        return EXIT_FAILURE;
+    }
 
-    if (write_buffer_to_file("output.bin", compressed_buffer, compressed_len) != 0) {
+    if (write_buffer_to_file("output.bin", encrypted_buffer, encrypted_len) != 0) {
         fprintf(stderr, "Error al escribir 'output.bin': %s\n", strerror(errno));
         free(input_buffer);
         free(compressed_buffer);
+        free(encrypted_buffer);
         return EXIT_FAILURE;
     }
 
@@ -171,9 +182,11 @@ int main(int argc, char *argv[])
 
     printf("Tamano original: %zu bytes\n", input_len);
     printf("Tamano comprimido: %zu bytes\n", compressed_len);
+    printf("Tamano cifrado: %zu bytes\n", encrypted_len);
     printf("Ratio de compresion: %.4f\n", compression_ratio);
 
     free(input_buffer);
     free(compressed_buffer);
+    free(encrypted_buffer);
     return EXIT_SUCCESS;
 }

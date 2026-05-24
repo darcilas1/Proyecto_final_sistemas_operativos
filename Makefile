@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2
+CFLAGS = -D_DEFAULT_SOURCE -Wall -Wextra -O2
 LDFLAGS = -lz
 TARGET = pipeline
-SRC = src/main.c src/compress.c
+SRC = src/main.c src/compress.c src/encrypt.c
 
 .PHONY: all clean test
 

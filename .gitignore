@@ -1,0 +1,15 @@
+# Build outputs
+pipeline
+benchmark
+*.exe
+*.o
+
+# Generated pipeline outputs
+output.bin
+output_*.bin
+
+# Generated test files
+tests/*.bin
+
+# Accidental empty file created by shell typo
+make
