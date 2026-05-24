@@ -1,131 +1,193 @@
 # pipeline-io-c
 
 ## Integrantes
-- **Daniel Arcila** 
-- **Juan Esteban Peña** 
-- **Jeronimo Contreras** 
 
-Pipeline de seguridad en C que implementa lectura, compresión y cifrado de archivos optimizando el bus I/O mediante buffers alineados al tamaño de página del sistema operativo.
+- **Daniel Arcila**
+- **Juan Esteban Pena**
+- **Jeronimo Contreras**
+
+Pipeline de seguridad en C que implementa lectura, compresion y cifrado de archivos optimizando el bus I/O mediante buffers alineados al tamano de pagina del sistema operativo.
 
 ## Arquitectura del pipeline
 
-```
+```text
 Archivo en disco
-      │
-      ▼
- read_file_to_buffer()        ← bloques de 4096 bytes (tamaño de página x86)
-      │
-      ▼
- compress_buffer()            ← zlib Z_BEST_COMPRESSION
-      │
-      ▼
- encrypt_buffer()             ← cifrado simétrico en RAM (TODO: Persona 2)
-      │
-      ▼
- write_buffer_to_file()       ← escribe output.bin al disco
+      |
+      v
+ read_file_to_buffer()        <- bloques de 4096 bytes
+      |
+      v
+ compress_buffer()            <- zlib Z_BEST_COMPRESSION
+      |
+      v
+ encrypt_buffer()             <- RC4 en RAM + llave protegida con mlock()
+      |
+      v
+ write_buffer_to_file()       <- escribe output.bin al disco
 ```
 
-> **Regla arquitectónica clave:** siempre comprimir primero, encriptar después.
-> La encriptación genera datos pseudoaleatorios (entropía máxima) que hacen
-> imposible cualquier compresión posterior.
-
-## Estructura del proyecto
-
-```
-pipeline-io-c/
-├── src/
-│   ├── compress.c       Módulo de compresión (Persona 1)
-│   ├── compress.h       Módulo de compresión (Persona 1)
-│   ├── main.c           Pipeline base + TODO hooks para P2 (Persona 1)
-│   ├── encrypt.c        Módulo de cifrado (Persona 2 — en progreso)
-│   ├── encrypt.h        Módulo de cifrado (Persona 2 — en progreso)
-│   └── benchmark.c      Mediciones de rendimiento (Persona 3 — pendiente)
-├── tests/
-│   └── test_file_50mb.bin   ← generado con make test
-├── docs/
-│   └── benchmark_results.md ← tabla comparativa final (Persona 3)
-├── Makefile
-└── README.md
-```
+> **Regla arquitectonica clave:** siempre comprimir primero, encriptar despues.
+> La encriptacion genera datos pseudoaleatorios de alta entropia, lo que hace
+> ineficiente cualquier compresion posterior.
 
 ## Requisitos
 
-- GCC con soporte C99 o superior
-- zlib (`sudo apt install zlib1g-dev` en Ubuntu)
-- Make
+Este proyecto esta pensado para ejecutarse en Linux o WSL con Ubuntu. En PowerShell puro de Windows puede fallar porque el proyecto usa herramientas y cabeceras POSIX como `make`, `dd`, `getpass()`, `mlock()` y zlib.
 
-## Compilar y correr
+En Ubuntu/WSL instala las dependencias:
+
+```bash
+sudo apt update
+sudo apt install build-essential zlib1g-dev make
+```
+
+Si todavia no tienes Ubuntu en WSL, puedes instalarlo desde PowerShell:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+
+## Como ejecutar el programa paso a paso
+
+1. Crear la carpeta de pruebas si no existe:
+
+```bash
+mkdir -p tests
+```
+
+2. Limpiar binarios anteriores:
+
+```bash
+make clean
+```
+
+3. Compilar el proyecto:
+
+```bash
+make all
+```
+
+4. Generar un archivo de prueba de 10 MB y ejecutar el pipeline:
+
+```bash
+make test
+```
+
+5. Cuando el programa pida la llave, escribe cualquier clave para la prueba. La terminal no la muestra mientras escribes:
+
+```text
+Llave de cifrado:
+```
+
+6. Verifica que aparezca una salida parecida a esta:
+
+```text
+Tamano original: 10485760 bytes
+Tamano comprimido: X bytes
+Tamano cifrado: X bytes
+Ratio de compresion: 0.XXXX
+```
+
+7. Verifica que se haya generado el archivo cifrado:
+
+```bash
+ls -lh output.bin
+```
+
+Si `output.bin` existe y la salida muestra los tamanos del archivo, la prueba del pipeline principal fue exitosa.
+
+## Ejecutar con un archivo propio
+
+Tambien puedes ejecutar el pipeline con cualquier archivo:
+
+```bash
+make all
+./pipeline ruta/al/archivo.bin
+```
+
+El resultado se guarda en:
+
+```text
+output.bin
+```
+
+## Comandos utiles
 
 ```bash
 # Compilar
 make all
 
-# Generar archivo de prueba (10 MB) y correr el pipeline
+# Generar archivo de prueba de 10 MB y ejecutar
 make test
 
-# Limpiar binarios
+# Limpiar binarios y archivos generados por make
 make clean
 ```
 
-### Salida esperada
+## Estructura del proyecto
 
+```text
+pipeline-io-c/
+|-- src/
+|   |-- compress.c
+|   |-- compress.h
+|   |-- main.c
+|   |-- encrypt.c
+|   |-- encrypt.h
+|   `-- benchmark.c
+|-- tests/
+|-- docs/
+|   `-- benchmark_results.md
+|-- Makefile
+`-- README.md
 ```
-Tamano original:    10485760 bytes
-Tamano comprimido:  XXXXXX bytes
-Ratio de compresion: 0.XXXX
-```
 
-## Módulos
+## Modulos
 
-### compress.c / compress.h 
+### compress.c / compress.h
 
-Implementa compresión y descompresión en memoria usando zlib.
+Implementa compresion y descompresion en memoria usando zlib.
 
-| Función | Descripción |
+| Funcion | Descripcion |
 |---|---|
-| `compress_buffer(in, in_len, out, out_len)` | Comprime un buffer en memoria con Z_BEST_COMPRESSION |
+| `compress_buffer(in, in_len, out, out_len)` | Comprime un buffer en memoria con `Z_BEST_COMPRESSION` |
 | `decompress_buffer(in, in_len, out, out_len)` | Descomprime un buffer previamente comprimido |
 
-Ambas retornan `0` en éxito y `-1` en error. El llamador es responsable de liberar `*out` con `free()`.
+Ambas funciones retornan `0` en exito y `-1` en error. El llamador debe liberar `*out` con `free()`.
 
-**¿Por qué 4096 bytes?**
-El buffer de lectura usa bloques de 4096 bytes porque coincide con el tamaño de página de memoria virtual en arquitectura x86/Linux y con el bloque estándar del sistema de archivos ext4. Alinear los buffers a este tamaño evita lecturas parciales y maximiza la eficiencia del bus I/O.
+### encrypt.c / encrypt.h
 
-### encrypt.c / encrypt.h  *(Persona 2 — pendiente)*
+Implementa cifrado simetrico RC4 operando unicamente en RAM.
 
-Debe implementar cifrado simétrico operando **únicamente en RAM**, nunca escribiendo la llave a disco.
+Detalles de seguridad implementados:
 
-Requisitos:
-- Función `encrypt_buffer()` y `decrypt_buffer()`
-- La llave debe pedirse por consola (no hardcodeada)
-- Borrar la llave de la RAM con `explicit_bzero()` inmediatamente después de usarla
-- Usar `mlock()` para evitar que el SO mueva la llave al Swap
-- Enchufar en `main.c` donde están los comentarios `TODO Persona 2`
+- `encrypt_buffer()` y `decrypt_buffer()` trabajan sobre buffers en memoria.
+- La llave se pide por consola con `getpass()`, no por `argv` ni hardcodeada.
+- La llave se copia a un buffer bloqueado con `mlock()` para evitar swap.
+- La copia temporal de `getpass()` y el buffer bloqueado se borran con `explicit_bzero()`.
+- El buffer bloqueado se libera con `munlock()` despues de usar la llave.
 
-### benchmark.c  *(Persona 3 — pendiente)*
+### benchmark.c
 
-Debe medir y comparar los tres escenarios:
+Modulo pendiente para medir y comparar:
 
-| Escenario | Descripción |
+| Escenario | Descripcion |
 |---|---|
-| A. Clásico | Lectura y escritura directa sin transformaciones |
-| B. Solo compresión | Pipeline con compresión activada |
-| C. Compresión + cifrado | Pipeline completo |
+| A. Clasico | Lectura y escritura directa sin transformaciones |
+| B. Solo compresion | Pipeline con compresion activada |
+| C. Compresion + cifrado | Pipeline completo |
 
-Usar `clock_gettime(CLOCK_MONOTONIC)` para medir tiempo de CPU y `strace` para aislar el tiempo de espera I/O.
+Los resultados finales deben documentarse en [`docs/benchmark_results.md`](docs/benchmark_results.md).
 
-## Benchmark (resultados finales)
+## Estado del trabajo
 
-Ver [`docs/benchmark_results.md`](docs/benchmark_results.md) — se completa cuando Persona 3 termine su módulo.
-
-## División de trabajo
-
-| Módulo | Responsable | Estado |
-|---|---|---|
-| Estructura base del proyecto | Persona 1 | Completo |
-| compress.c / compress.h | Persona 1 | Completo |
-| main.c (pipeline base) | Persona 1 | Completo |
-| encrypt.c / encrypt.h | Persona 2 | En progreso |
-| benchmark.c | Persona 3 | Pendiente |
-| docs/benchmark_results.md | Persona 3 | Pendiente |
-| Integración final main.c | Los 3 | Pendiente |
+| Modulo | Estado |
+|---|---|
+| Estructura base del proyecto | Completo |
+| compress.c / compress.h | Completo |
+| main.c | Completo |
+| encrypt.c / encrypt.h | Completo |
+| Integracion final main.c | Cifrado integrado |
+| benchmark.c | Pendiente |
+| docs/benchmark_results.md | Pendiente |
