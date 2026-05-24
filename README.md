@@ -1,16 +1,15 @@
 # pipeline-io-c
 
 ## Integrantes
+- Daniel Arcila
+- Juan Esteban Peña
+- Jerónimo Contreras
 
-- **Daniel Arcila**
-- **Juan Esteban Pena**
-- **Jeronimo Contreras**
-
-Pipeline de seguridad en C que implementa lectura, compresion y cifrado de archivos optimizando el bus I/O mediante buffers alineados al tamano de pagina del sistema operativo.
+Pipeline de seguridad en C que implementa lectura, compresión y cifrado de archivos optimizando el bus I/O mediante buffers alineados al tamaño de página del sistema operativo.
 
 ## Arquitectura del pipeline
 
-```text
+```
 Archivo en disco
       |
       v
@@ -26,13 +25,11 @@ Archivo en disco
  write_buffer_to_file()       <- escribe output.bin al disco
 ```
 
-> **Regla arquitectonica clave:** siempre comprimir primero, encriptar despues.
-> La encriptacion genera datos pseudoaleatorios de alta entropia, lo que hace
-> ineficiente cualquier compresion posterior.
+**Regla arquitectónica clave:** siempre comprimir primero, encriptar después. La encriptación genera datos pseudoaleatorios de alta entropía, lo que hace ineficiente cualquier compresión posterior.
 
 ## Requisitos
 
-Este proyecto esta pensado para ejecutarse en Linux o WSL con Ubuntu. En PowerShell puro de Windows puede fallar porque el proyecto usa herramientas y cabeceras POSIX como `make`, `dd`, `getpass()`, `mlock()` y zlib.
+Este proyecto está pensado para ejecutarse en **Linux o WSL con Ubuntu**. En PowerShell puro de Windows puede fallar porque el proyecto usa herramientas y cabeceras POSIX como `make`, `dd`, `getpass()`, `mlock()` y `zlib`.
 
 En Ubuntu/WSL instala las dependencias:
 
@@ -41,65 +38,57 @@ sudo apt update
 sudo apt install build-essential zlib1g-dev make
 ```
 
-Si todavia no tienes Ubuntu en WSL, puedes instalarlo desde PowerShell:
+Si todavía no tienes Ubuntu en WSL, puedes instalarlo desde PowerShell:
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
+## Cómo ejecutar el programa paso a paso
 
-## Como ejecutar el programa paso a paso
-
-1. Crear la carpeta de pruebas si no existe:
-
+**Crear la carpeta de pruebas si no existe:**
 ```bash
 mkdir -p tests
 ```
 
-2. Limpiar binarios anteriores:
-
+**Limpiar binarios anteriores:**
 ```bash
 make clean
 ```
 
-3. Compilar el proyecto:
-
+**Compilar el proyecto:**
 ```bash
 make all
 ```
 
-4. Generar un archivo de prueba de 10 MB y ejecutar el pipeline:
-
+**Generar un archivo de prueba de 10 MB y ejecutar el pipeline:**
 ```bash
 make test
 ```
 
-5. Cuando el programa pida la llave, escribe cualquier clave para la prueba. La terminal no la muestra mientras escribes:
-
-```text
+Cuando el programa pida la llave, escribe cualquier clave para la prueba. La terminal no la muestra mientras escribes:
+```
 Llave de cifrado:
 ```
 
-6. Verifica que aparezca una salida parecida a esta:
-
-```text
+Verifica que aparezca una salida parecida a esta:
+```
 Tamano original: 10485760 bytes
 Tamano comprimido: X bytes
 Tamano cifrado: X bytes
 Ratio de compresion: 0.XXXX
 ```
 
-7. Verifica que se haya generado el archivo cifrado:
-
+Verifica que se haya generado el archivo cifrado:
 ```bash
 ls -lh output.bin
 ```
 
-Si `output.bin` existe y la salida muestra los tamanos del archivo, la prueba del pipeline principal fue exitosa.
+Si `output.bin` existe y la salida muestra los tamaños del archivo, la prueba del pipeline principal fue exitosa.
 
 ## Ejecutar con un archivo propio
 
-Tambien puedes ejecutar el pipeline con cualquier archivo:
+También puedes ejecutar el pipeline con cualquier archivo:
 
 ```bash
 make all
@@ -107,12 +96,26 @@ make all
 ```
 
 El resultado se guarda en:
-
-```text
+```
 output.bin
 ```
 
-## Comandos utiles
+## Ejecutar el benchmark
+
+```bash
+# Generar archivo de prueba de 50 MB
+dd if=/dev/zero bs=1M count=50 | tr '\0' 'A' > tests/test_50mb.txt
+
+# Compilar benchmark
+gcc -O2 -Wall -Wextra src/benchmark.c src/compress.c src/encrypt.c -lz -o benchmark
+
+# Correr benchmark
+./benchmark tests/test_50mb.txt
+```
+
+Los resultados se documentan en [`docs/benchmark_results.md`](docs/benchmark_results.md).
+
+## Comandos útiles
 
 ```bash
 # Compilar
@@ -127,7 +130,7 @@ make clean
 
 ## Estructura del proyecto
 
-```text
+```
 pipeline-io-c/
 |-- src/
 |   |-- compress.c
@@ -143,51 +146,85 @@ pipeline-io-c/
 `-- README.md
 ```
 
-## Modulos
+## Módulos
 
 ### compress.c / compress.h
 
-Implementa compresion y descompresion en memoria usando zlib.
+Implementa compresión y descompresión en memoria usando zlib.
 
-| Funcion | Descripcion |
+| Función | Descripción |
 |---|---|
 | `compress_buffer(in, in_len, out, out_len)` | Comprime un buffer en memoria con `Z_BEST_COMPRESSION` |
 | `decompress_buffer(in, in_len, out, out_len)` | Descomprime un buffer previamente comprimido |
 
-Ambas funciones retornan `0` en exito y `-1` en error. El llamador debe liberar `*out` con `free()`.
+Ambas funciones retornan `0` en éxito y `-1` en error. El llamador debe liberar `*out` con `free()`.
 
 ### encrypt.c / encrypt.h
 
-Implementa cifrado simetrico RC4 operando unicamente en RAM.
+Implementa cifrado simétrico RC4 operando únicamente en RAM.
 
-Detalles de seguridad implementados:
-
+**Detalles de seguridad implementados:**
 - `encrypt_buffer()` y `decrypt_buffer()` trabajan sobre buffers en memoria.
 - La llave se pide por consola con `getpass()`, no por `argv` ni hardcodeada.
 - La llave se copia a un buffer bloqueado con `mlock()` para evitar swap.
 - La copia temporal de `getpass()` y el buffer bloqueado se borran con `explicit_bzero()`.
-- El buffer bloqueado se libera con `munlock()` despues de usar la llave.
+- El buffer bloqueado se libera con `munlock()` después de usar la llave.
 
 ### benchmark.c
 
-Modulo pendiente para medir y comparar:
+Mide y compara los tres escenarios del pipeline:
 
-| Escenario | Descripcion |
+| Escenario | Descripción |
 |---|---|
-| A. Clasico | Lectura y escritura directa sin transformaciones |
-| B. Solo compresion | Pipeline con compresion activada |
-| C. Compresion + cifrado | Pipeline completo |
+| A. Clásico | Lectura y escritura directa sin transformaciones |
+| B. Solo compresión | Pipeline con compresión activada |
+| C. Compresión + cifrado | Pipeline completo |
 
-Los resultados finales deben documentarse en [`docs/benchmark_results.md`](docs/benchmark_results.md).
+Los resultados están documentados en [`docs/benchmark_results.md`](docs/benchmark_results.md).
+
+---
+
+## Reglas Arquitectónicas
+
+### Regla 1 — Buffers de 4096 bytes
+Los bloques de lectura y escritura están alineados al tamaño de página del sistema operativo (4096 bytes = 4 KB). Este valor coincide con el tamaño de página estándar en x86/Linux y con el bloque del sistema de archivos ext4, lo que evita lecturas parciales y maximiza la eficiencia del bus I/O.
+
+### Regla 2 — Comprimir antes de encriptar
+La compresión busca patrones repetitivos en los datos. La encriptación genera salida pseudoaleatoria de alta entropía, eliminando cualquier patrón. Si se encripta primero, la compresión posterior es inútil y el archivo puede incluso crecer. El orden correcto es siempre: comprimir → encriptar.
+
+### Regla 3 — Todo en RAM
+Ninguna transformación intermedia toca el disco. Los buffers de entrada, comprimido y cifrado viven en el heap durante todo el pipeline. Solo la lectura inicial y la escritura final realizan syscalls de I/O.
+
+### Regla 4 — Gestión segura de llaves
+La llave criptográfica nunca se pasa por argumentos de línea de comandos ni se hardcodea. Se solicita por consola con `getpass()`, se bloquea en RAM con `mlock()` para evitar swap, y se destruye con `explicit_bzero()` inmediatamente después de usarse.
+
+### Regla 5 — Liberar siempre
+Todo buffer allocado con `malloc()` o `realloc()` tiene un camino de liberación con `free()` en todos los flujos posibles, incluyendo los caminos de error.
+
+### Regla 6 — Criptografía en C Space
+
+**Mandato:** El algoritmo de encriptación simétrico opera exclusivamente sobre buffers en memoria RAM (C Space), nunca sobre archivos en disco. La implementación usa RC4 propio sin depender de funciones de alto nivel de librerías que escriban a disco.
+
+**Seguridad de la llave:** La llave debe ser borrada de la memoria RAM inmediatamente después de usarse. Un ingeniero de OS no deja basura criptográfica en la pila (stack) ni en el heap. El flujo obligatorio es:
+
+```
+getpass() → malloc() → mlock() → memcpy() → usar llave → explicit_bzero() → munlock() → free()
+```
+
+**Prohibido:**
+- Pasar la llave por `argv[]`
+- Hardcodear la llave en el código fuente
+- Usar funciones de OpenSSL que escriban directamente a disco
+- Dejar la llave en memoria sin destruir después de cifrar
 
 ## Estado del trabajo
 
-| Modulo | Estado |
+| Módulo | Estado |
 |---|---|
-| Estructura base del proyecto | Completo |
-| compress.c / compress.h | Completo |
-| main.c | Completo |
-| encrypt.c / encrypt.h | Completo |
-| Integracion final main.c | Cifrado integrado |
-| benchmark.c | Pendiente |
-| docs/benchmark_results.md | Pendiente |
+| Estructura base del proyecto | ✅ Completo |
+| compress.c / compress.h | ✅ Completo |
+| main.c | ✅ Completo |
+| encrypt.c / encrypt.h | ✅ Completo |
+| Integración final main.c | ✅ Cifrado integrado |
+| benchmark.c | ✅ Completo |
+| docs/benchmark_results.md | ✅ Completo |
