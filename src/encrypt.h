@@ -6,5 +6,23 @@
 
 int encrypt_buffer(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len);
 int decrypt_buffer(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len);
+int prompt_secure_key(const char *prompt, uint8_t **key_data, size_t *key_len);
+void destroy_secure_key_data(uint8_t *key_data, size_t key_len);
+int encrypt_buffer_with_key(
+    const uint8_t *in,
+    size_t in_len,
+    const uint8_t *key,
+    size_t key_len,
+    uint8_t **out,
+    size_t *out_len
+);
+int decrypt_buffer_with_key(
+    const uint8_t *in,
+    size_t in_len,
+    const uint8_t *key,
+    size_t key_len,
+    uint8_t **out,
+    size_t *out_len
+);
 
 #endif

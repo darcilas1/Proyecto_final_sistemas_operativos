@@ -129,6 +129,73 @@ static void destroy_secure_key(struct secure_key *key)
     key->locked_len = 0U;
 }
 
+void destroy_secure_key_data(uint8_t *key_data, size_t key_len)
+{
+    if (key_data == NULL) {
+        return;
+    }
+
+    explicit_bzero(key_data, key_len);
+    (void)munlock(key_data, key_len);
+    free(key_data);
+}
+
+int prompt_secure_key(const char *prompt, uint8_t **key_data, size_t *key_len)
+{
+    struct secure_key key;
+
+    if (prompt == NULL || key_data == NULL || key_len == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    *key_data = NULL;
+    *key_len = 0U;
+
+    if (read_secure_key(prompt, &key) != 0) {
+        return -1;
+    }
+
+    *key_data = key.data;
+    *key_len = key.len;
+    return 0;
+}
+
+static int crypt_buffer_with_key(
+    const uint8_t *in,
+    size_t in_len,
+    const uint8_t *key,
+    size_t key_len,
+    uint8_t **out,
+    size_t *out_len
+)
+{
+    uint8_t *encrypted_data;
+
+    if ((in == NULL && in_len > 0U) || key == NULL || key_len == 0U ||
+        out == NULL || out_len == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    *out = NULL;
+    *out_len = 0U;
+
+    encrypted_data = NULL;
+    if (in_len > 0U) {
+        encrypted_data = (uint8_t *)malloc(in_len);
+        if (encrypted_data == NULL) {
+            return -1;
+        }
+
+        rc4_crypt(in, in_len, key, key_len, encrypted_data);
+    }
+
+    *out = encrypted_data;
+    *out_len = in_len;
+    return 0;
+}
+
 static int crypt_buffer_with_prompt(
     const uint8_t *in,
     size_t in_len,
@@ -138,36 +205,44 @@ static int crypt_buffer_with_prompt(
 )
 {
     struct secure_key key;
-    uint8_t *encrypted_data;
+    int status;
 
     if ((in == NULL && in_len > 0U) || out == NULL || out_len == NULL) {
         errno = EINVAL;
         return -1;
     }
 
-    *out = NULL;
-    *out_len = 0U;
-
     if (read_secure_key(prompt, &key) != 0) {
         return -1;
     }
 
-    encrypted_data = NULL;
-    if (in_len > 0U) {
-        encrypted_data = (uint8_t *)malloc(in_len);
-        if (encrypted_data == NULL) {
-            destroy_secure_key(&key);
-            return -1;
-        }
-
-        rc4_crypt(in, in_len, key.data, key.len, encrypted_data);
-    }
-
+    status = crypt_buffer_with_key(in, in_len, key.data, key.len, out, out_len);
     destroy_secure_key(&key);
+    return status;
+}
 
-    *out = encrypted_data;
-    *out_len = in_len;
-    return 0;
+int encrypt_buffer_with_key(
+    const uint8_t *in,
+    size_t in_len,
+    const uint8_t *key,
+    size_t key_len,
+    uint8_t **out,
+    size_t *out_len
+)
+{
+    return crypt_buffer_with_key(in, in_len, key, key_len, out, out_len);
+}
+
+int decrypt_buffer_with_key(
+    const uint8_t *in,
+    size_t in_len,
+    const uint8_t *key,
+    size_t key_len,
+    uint8_t **out,
+    size_t *out_len
+)
+{
+    return crypt_buffer_with_key(in, in_len, key, key_len, out, out_len);
 }
 
 int encrypt_buffer(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len)

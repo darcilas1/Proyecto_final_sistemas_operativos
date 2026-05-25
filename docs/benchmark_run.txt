@@ -1,0 +1,39 @@
+Script started on 2026-05-24 23:03:42-05:00 [COMMAND="/tmp/runbench.sh" TERM="xterm-256color" TTY="/dev/pts/2" COLUMNS="80" LINES="24"]
+
+[*] Iniciando escenario A - I/O clasico...
+    OK - salida: output_a.bin (52428800 bytes)
+[*] Iniciando escenario B - Solo compresion...
+    OK - salida: output_b.bin (50976 bytes)
+[*] Iniciando escenario C - Compresion + Cifrado...
+    (Se pedira la llave por consola fuera de la medicion)
+Llave de cifrado: 
+    OK - salida: output_c.bin (50976 bytes)
+[*] Verificacion de integridad: descifrar y descomprimir 'output_c.bin'
+    OK - integridad verificada: el contenido restaurado coincide byte a byte
+
+=============================================================
+  BENCHMARK - Compresion y Cifrado en C
+=============================================================
+  Archivo de entrada : 52428800 bytes (50.00 MB)
+-------------------------------------------------------------
+  Metrica                      A. Clasico     B. Compresion  C. Comp+Cifr  
+  ---------------------------- -------------- -------------- --------------
+  Tamano transmitido (bytes)   52428800       50976          50976         
+    (% del original)           100.00%        0.10%           0.10%          
+  Tiempo CPU total (s)         0.170145       0.296133       0.336252      
+  Tiempo CPU compresion (s)    0.000000       0.131128       0.122295      
+  Tiempo CPU cifrado (s)       0.000000       0.000000       0.000109      
+  Tiempo espera I/O (s)        1.713708       1.677707       1.679565      
+  Tiempo total (s)             1.883853       1.973840       2.015817      
+=============================================================
+
+Aislamiento de cargas de CPU:
+  - Compresion sola (B): 0.131128 s de CPU
+  - Cifrado adicional en C: 0.000109 s de CPU
+
+Verificacion: habilitada, revisar el mensaje OK de integridad arriba.
+Strace sugerido:
+  strace -c -e trace=read,write,open,openat,close ./benchmark --verify <archivo>
+
+
+Script done on 2026-05-24 23:03:56-05:00 [COMMAND_EXIT_CODE="0"]

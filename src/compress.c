@@ -104,10 +104,20 @@ int decompress_buffer(const uint8_t *in, size_t in_len, uint8_t **out, size_t *o
             return -1;
         }
 
-        if (capacity > SIZE_MAX - BUFFER_BLOCK_SIZE) {
-            return -1;
+        if (capacity > SIZE_MAX / 2U) {
+            if (capacity > SIZE_MAX - BUFFER_BLOCK_SIZE) {
+                return -1;
+            }
+            capacity += BUFFER_BLOCK_SIZE;
+        } else {
+            capacity *= 2U;
         }
 
-        capacity += BUFFER_BLOCK_SIZE;
+        while (capacity % BUFFER_BLOCK_SIZE != 0U) {
+            if (capacity == SIZE_MAX) {
+                return -1;
+            }
+            capacity++;
+        }
     }
 }

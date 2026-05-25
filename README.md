@@ -38,12 +38,6 @@ sudo apt update
 sudo apt install build-essential zlib1g-dev make
 ```
 
-Si todavía no tienes Ubuntu en WSL, puedes instalarlo desde PowerShell:
-
-```powershell
-wsl --install -d Ubuntu
-```
-
 ## Cómo ejecutar el programa paso a paso
 
 **Crear la carpeta de pruebas si no existe:**
@@ -103,17 +97,31 @@ output.bin
 ## Ejecutar el benchmark
 
 ```bash
-# Generar archivo de prueba de 50 MB
-dd if=/dev/zero bs=1M count=50 | tr '\0' 'A' > tests/test_50mb.txt
-
 # Compilar benchmark
-gcc -O2 -Wall -Wextra src/benchmark.c src/compress.c src/encrypt.c -lz -o benchmark
+make benchmark
 
-# Correr benchmark
-./benchmark tests/test_50mb.txt
+# Generar archivo de prueba de 50 MB y correr benchmark con verificacion
+make benchmark-test
 ```
 
-Los resultados se documentan en [`docs/benchmark_results.md`](docs/benchmark_results.md).
+Detalles del benchmark:
+- El archivo de prueba es un texto sintetico de 50 MB altamente compresible.
+- El benchmark pide la llave **fuera** de la ventana de medicion para no contaminar el wall-clock con tiempo humano.
+- `--verify` descifra, descomprime y compara byte a byte contra el archivo original.
+
+Tambien puedes correrlo manualmente:
+
+```bash
+mkdir -p tests
+dd if=/dev/zero bs=1M count=50 status=none | tr '\0' 'A' > tests/test_50mb.txt
+./benchmark --verify tests/test_50mb.txt
+```
+
+Los resultados y evidencias se documentan en:
+- [`docs/benchmark_results.md`](docs/benchmark_results.md)
+- [`docs/benchmark_run.txt`](docs/benchmark_run.txt)
+- [`docs/time_run.txt`](docs/time_run.txt)
+- [`docs/strace_run.txt`](docs/strace_run.txt)
 
 ## Comandos útiles
 
@@ -123,6 +131,12 @@ make all
 
 # Generar archivo de prueba de 10 MB y ejecutar
 make test
+
+# Compilar benchmark
+make benchmark
+
+# Generar archivo de 50 MB y correr benchmark con verificacion
+make benchmark-test
 
 # Limpiar binarios y archivos generados por make
 make clean
@@ -172,7 +186,7 @@ Implementa cifrado simétrico RC4 operando únicamente en RAM.
 
 ### benchmark.c
 
-Mide y compara los tres escenarios del pipeline:
+Mide y compara los tres escenarios del pipeline y aísla el costo de CPU de cada transformación:
 
 | Escenario | Descripción |
 |---|---|
@@ -180,7 +194,7 @@ Mide y compara los tres escenarios del pipeline:
 | B. Solo compresión | Pipeline con compresión activada |
 | C. Compresión + cifrado | Pipeline completo |
 
-Los resultados están documentados en [`docs/benchmark_results.md`](docs/benchmark_results.md).
+Ademas, `--verify` ejecuta el recorrido inverso `descifrar -> descomprimir` y valida que el contenido restaurado coincide byte a byte con el original.
 
 ---
 
@@ -216,15 +230,3 @@ getpass() → malloc() → mlock() → memcpy() → usar llave → explicit_bzer
 - Hardcodear la llave en el código fuente
 - Usar funciones de OpenSSL que escriban directamente a disco
 - Dejar la llave en memoria sin destruir después de cifrar
-
-## Estado del trabajo
-
-| Módulo | Estado |
-|---|---|
-| Estructura base del proyecto | ✅ Completo |
-| compress.c / compress.h | ✅ Completo |
-| main.c | ✅ Completo |
-| encrypt.c / encrypt.h | ✅ Completo |
-| Integración final main.c | ✅ Cifrado integrado |
-| benchmark.c | ✅ Completo |
-| docs/benchmark_results.md | ✅ Completo |

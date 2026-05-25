@@ -1,34 +1,94 @@
-
 # Benchmark Results
 
-## Archivo de prueba
-- **Tamaño:** 50 MB (documento de texto)
-- **Herramientas:** `clock_gettime()` para tiempos de CPU y wall-clock, `strace` para conteo de syscalls de I/O
+## Contexto de la medicion
+- **Fecha:** 2026-05-24
+- **Entorno:** WSL2 Ubuntu sobre Windows
+- **Archivo de prueba:** `tests/test_50mb.txt`
+- **Tamano del archivo:** `52428800` bytes = `50.00 MB`
+- **Carga usada:** texto sintetico altamente compresible generado con `dd ... | tr '\0' 'A'`
 
-## Tabla comparativa
+## Metodologia
+- `benchmark` mide tres escenarios: A clasico, B solo compresion y C compresion + cifrado.
+- La llave se solicita **antes** de medir el escenario C, para no meter tiempo humano en el wall-clock.
+- `--verify` valida el camino inverso `descifrar -> descomprimir` y compara el resultado byte a byte con el archivo original.
+- La evidencia cruda queda guardada en:
+  - [`docs/benchmark_run.txt`](docs/benchmark_run.txt)
+  - [`docs/time_run.txt`](docs/time_run.txt)
+  - [`docs/strace_run.txt`](docs/strace_run.txt)
 
-| Métrica del Kernel | A. Clásico (Plano directo) | B. Solo Compresión | C. Compresión + Encriptación | Impacto Final (A vs C) |
-|---|---|---|---|---|
-| Tamaño Transmitido (I/O) | 50 MB | 15 MB | 15.1 MB | -69.8% (Éxito en I/O) |
-| Tiempo de CPU (User Mode) | 0.01 ms | 35.0 ms | 65.0 ms | Aumento significativo de CPU |
-| Tiempo de Espera I/O | 120.0 ms | 43.0 ms | 43.5 ms | -63% (Ahorro de latencia) |
-| Tiempo Total (Wall-clock) | 120.2 ms | 78.0 ms | 108.5 ms | Sistema 9% más rápido Y Seguro |
+## Resultado principal
 
-## Análisis por escenario
+Valores tomados de [`docs/benchmark_run.txt`](docs/benchmark_run.txt):
 
-### A. Clásico — I/O puro
-El archivo de 50 MB se transmite sin transformación. El tiempo de CPU es mínimo (0.01 ms) porque el procesador solo mueve bytes entre buffers. El cuello de botella es completamente el disco: 120.0 ms de espera I/O dominan el tiempo total.
+| Metrica | A. Clasico | B. Solo compresion | C. Compresion + cifrado |
+|---|---:|---:|---:|
+| Tamano transmitido (bytes) | 52428800 | 50976 | 50976 |
+| % del original | 100.00% | 0.10% | 0.10% |
+| Tiempo CPU total (s) | 0.170145 | 0.296133 | 0.336252 |
+| Tiempo CPU compresion (s) | 0.000000 | 0.131128 | 0.122295 |
+| Tiempo CPU cifrado (s) | 0.000000 | 0.000000 | 0.000109 |
+| Tiempo espera I/O (s) | 1.713708 | 1.677707 | 1.679565 |
+| Tiempo total (s) | 1.883853 | 1.973840 | 2.015817 |
 
-### B. Solo Compresión
-zlib con `Z_BEST_COMPRESSION` reduce el archivo de 50 MB a ~15 MB (ratio 0.30). El tiempo de CPU sube a 35.0 ms porque el algoritmo DEFLATE analiza patrones en el buffer. Sin embargo, el tiempo de espera I/O cae a 43.0 ms porque se transmiten 35 MB menos al disco. El tiempo total baja de 120.2 ms a 78.0 ms — una mejora del 35%.
+## Lectura tecnica
 
-### C. Compresión + Encriptación
-Se comprime primero (obligatorio — ver Regla 6) y luego se cifra con RC4 en RAM. El tamaño final es 15.1 MB: la diferencia de 0.1 MB respecto al escenario B corresponde al padding de bloque del cifrador. El tiempo de CPU sube a 65.0 ms (RC4 añade ~30 ms sobre los 35 ms de compresión). El tiempo de espera I/O se mantiene en 43.5 ms porque el tamaño transmitido es prácticamente idéntico al escenario B. El tiempo total es 108.5 ms — un 9% más rápido que el clásico, con el archivo completamente cifrado y ocupando un 70% menos en disco.
+### 1. Orden correcto del pipeline
+El proyecto ejecuta `compresion -> cifrado`, que es el orden correcto frente a la entropia. El archivo cifrado mide exactamente lo mismo que el comprimido (`50976` bytes), lo cual confirma ademas que **RC4 no agrega padding**.
 
-## Conclusión arquitectónica
+### 2. Aislamiento de CPU
+- La compresion sola en el escenario B consume `0.131128 s` de CPU.
+- El costo adicional del cifrado dentro del escenario C fue `0.000109 s` de CPU.
+- Como el archivo comprimido termina siendo muy pequeno (`50976` bytes), el cifrado opera sobre muy pocos datos y su overhead queda en el orden de las decimas de milisegundo.
 
-Añadir seguridad criptográfica casi anula el beneficio de tiempo ganado por la compresión, pero el sistema resultante es **100% cifrado** y ocupa un **70% menos en disco**, operando en el mismo orden de tiempo que el enfoque clásico inseguro.
+### 3. Beneficio de I/O
+- Escenario A escribe `52428800` bytes.
+- Escenarios B y C escriben `50976` bytes.
+- La reduccion de bytes transmitidos es de aproximadamente `99.90%`.
 
-El análisis demuestra que el verdadero cuello de botella de este sistema es el I/O de disco, no la CPU. Comprimir reduce el tamaño transmitido en un 70%, lo que recorta el tiempo de espera I/O de 120 ms a 43 ms. Cifrar con RC4 cuesta 30 ms adicionales de CPU pero no incrementa el I/O de forma significativa (solo 0.1 MB de padding). En consecuencia, el pipeline completo (C) es más rápido que el clásico (A) aunque realiza dos transformaciones adicionales.
+En esta carga particular, la compresion reduce tanto el tamano final que el costo de escribir al disco cae drasticamente y el cifrado no cambia el volumen de I/O.
 
-La lección arquitectónica central es: **optimizar el bus I/O tiene mayor impacto que optimizar la CPU** en cargas de trabajo intensivas en disco. Un sistema que gasta más ciclos de procesador pero transmite menos bytes al disco terminará siendo más rápido en la práctica.
+### 4. Integridad
+La verificacion de [`docs/benchmark_run.txt`](docs/benchmark_run.txt) termina con:
+
+`OK - integridad verificada: el contenido restaurado coincide byte a byte`
+
+Eso demuestra que el pipeline completo no corrompe los datos al hacer `comprimir -> cifrar -> descifrar -> descomprimir`.
+
+## Evidencia con /usr/bin/time
+
+Valores tomados de [`docs/time_run.txt`](docs/time_run.txt):
+
+```text
+real 14.70
+user 0.46
+sys 0.72
+```
+
+Interpretacion:
+- Este `time` externo mide la ejecucion completa del comando interactivo.
+- Incluye el benchmark completo, la verificacion y la interaccion humana para escribir la llave.
+- Por eso sus valores **no** se comparan directamente con la tabla interna A/B/C; la tabla interna es la que aísla las cargas del pipeline.
+
+## Evidencia con strace
+
+Valores tomados de [`docs/strace_run.txt`](docs/strace_run.txt):
+
+| Syscall | Calls | Tiempo acumulado (s) | % del tiempo medido |
+|---|---:|---:|---:|
+| `read` | 64022 | 1.281666 | 99.12% |
+| `write` | 42 | 0.010542 | 0.82% |
+| `openat` | 13 | 0.000594 | 0.05% |
+| `close` | 13 | 0.000292 | 0.02% |
+| **Total** | **64090** | **1.293094** | **100.00%** |
+
+Interpretacion:
+- `read` domina el tiempo de syscalls observadas, lo cual es consistente con un pipeline que mueve un archivo grande desde disco hacia RAM y luego verifica el contenido restaurado.
+- `write` aparece pocas veces porque solo se materializan tres archivos de salida (`output_a.bin`, `output_b.bin`, `output_c.bin`).
+- Las transformaciones de compresion y cifrado ocurren en memoria, no mediante syscalls adicionales de archivo.
+
+## Conclusiones
+- El proyecto ya demuestra el orden correcto `compresion -> cifrado`.
+- La llave se usa sin hardcodeo ni `argv`, y el benchmark ya no contamina las mediciones con tiempo humano de digitacion.
+- RC4 no agrega padding, por lo que `output_b.bin` y `output_c.bin` tienen el mismo tamano en esta implementacion.
+- La integridad del recorrido inverso quedo verificada byte a byte.
+- La evidencia de `time` y `strace` ya esta almacenada en el repo para sustentar la entrega.
